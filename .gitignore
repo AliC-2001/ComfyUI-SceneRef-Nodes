@@ -1,0 +1,4 @@
+# local machine settings (paths to Blender / Daz)
+scene_ref_config.json
+__pycache__/
+*.pyc

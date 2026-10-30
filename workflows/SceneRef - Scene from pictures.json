@@ -1,0 +1,963 @@
+{
+  "id": "96007143-5f8d-4372-8dd2-df0d897fb3f4",
+  "revision": 0,
+  "last_node_id": 4,
+  "last_link_id": 2,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "SceneRefScene",
+      "pos": [
+        40,
+        60
+      ],
+      "size": [
+        470,
+        374
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "main_view",
+          "name": "main_view",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "other_angles",
+          "name": "other_angles",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "source",
+          "name": "source",
+          "type": "COMBO",
+          "widget": {
+            "name": "source"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "description",
+          "name": "description",
+          "type": "STRING",
+          "widget": {
+            "name": "description"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "use_file_text",
+          "name": "use_file_text",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "use_file_text"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "max_megapixels",
+          "name": "max_megapixels",
+          "type": "FLOAT",
+          "widget": {
+            "name": "max_megapixels"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "pictures_json",
+          "name": "pictures_json",
+          "type": "STRING",
+          "widget": {
+            "name": "pictures_json"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "shot",
+          "name": "shot",
+          "type": "SCENEREF_SHOT",
+          "links": [
+            1
+          ]
+        },
+        {
+          "localized_name": "image",
+          "name": "image",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "localized_name": "angles",
+          "name": "angles",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "localized_name": "width",
+          "name": "width",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "localized_name": "height",
+          "name": "height",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "localized_name": "description",
+          "name": "description",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SceneRefScene"
+      },
+      "widgets_values": [
+        "(pictures only)",
+        "",
+        true,
+        1,
+        "[]",
+        false
+      ],
+      "widgets_values_named": {
+        "source": "(pictures only)",
+        "description": "",
+        "use_file_text": true,
+        "max_megapixels": 1,
+        "pictures_json": "[]"
+      }
+    },
+    {
+      "id": 2,
+      "type": "SceneRefStudio",
+      "pos": [
+        560,
+        60
+      ],
+      "size": [
+        540,
+        812
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "shot",
+          "name": "shot",
+          "type": "SCENEREF_SHOT",
+          "link": 1
+        },
+        {
+          "localized_name": "cast",
+          "name": "cast",
+          "shape": 7,
+          "type": "SCENEREF_CAST",
+          "link": null
+        },
+        {
+          "localized_name": "loras",
+          "name": "loras",
+          "shape": 7,
+          "type": "SCENEREF_LORAS",
+          "link": null
+        },
+        {
+          "localized_name": "action_text",
+          "name": "action_text",
+          "shape": 7,
+          "type": "STRING",
+          "link": null
+        },
+        {
+          "localized_name": "backend",
+          "name": "backend",
+          "type": "COMBO",
+          "widget": {
+            "name": "backend"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "action",
+          "name": "action",
+          "type": "STRING",
+          "widget": {
+            "name": "action"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "expand",
+          "name": "expand",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "expand"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "room_details",
+          "name": "room_details",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "room_details"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "style",
+          "name": "style",
+          "type": "STRING",
+          "widget": {
+            "name": "style"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "seed",
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "steps",
+          "name": "steps",
+          "type": "INT",
+          "widget": {
+            "name": "steps"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "cfg",
+          "name": "cfg",
+          "type": "FLOAT",
+          "widget": {
+            "name": "cfg"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "control_strength",
+          "name": "control_strength",
+          "type": "FLOAT",
+          "widget": {
+            "name": "control_strength"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "control_mode",
+          "name": "control_mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "control_mode"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "ref_megapixels",
+          "name": "ref_megapixels",
+          "type": "FLOAT",
+          "widget": {
+            "name": "ref_megapixels"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "face_pass",
+          "name": "face_pass",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "face_pass"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "klein_model",
+          "name": "klein_model",
+          "type": "COMBO",
+          "widget": {
+            "name": "klein_model"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "klein_text_encoder",
+          "name": "klein_text_encoder",
+          "type": "COMBO",
+          "widget": {
+            "name": "klein_text_encoder"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "klein_vae",
+          "name": "klein_vae",
+          "type": "COMBO",
+          "widget": {
+            "name": "klein_vae"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "qwen_model",
+          "name": "qwen_model",
+          "type": "COMBO",
+          "widget": {
+            "name": "qwen_model"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "qwen_text_encoder",
+          "name": "qwen_text_encoder",
+          "type": "COMBO",
+          "widget": {
+            "name": "qwen_text_encoder"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "qwen_vae",
+          "name": "qwen_vae",
+          "type": "COMBO",
+          "widget": {
+            "name": "qwen_vae"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "qwen_controlnet",
+          "name": "qwen_controlnet",
+          "type": "COMBO",
+          "widget": {
+            "name": "qwen_controlnet"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "expander_model",
+          "name": "expander_model",
+          "type": "COMBO",
+          "widget": {
+            "name": "expander_model"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "cast_json",
+          "name": "cast_json",
+          "type": "STRING",
+          "widget": {
+            "name": "cast_json"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "loras_json",
+          "name": "loras_json",
+          "type": "STRING",
+          "widget": {
+            "name": "loras_json"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "identity_pass",
+          "name": "identity_pass",
+          "type": "COMBO",
+          "widget": {
+            "name": "identity_pass"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "identity_strength",
+          "name": "identity_strength",
+          "type": "FLOAT",
+          "widget": {
+            "name": "identity_strength"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "ref_boost",
+          "name": "ref_boost",
+          "type": "FLOAT",
+          "widget": {
+            "name": "ref_boost"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "krea2_model",
+          "name": "krea2_model",
+          "type": "COMBO",
+          "widget": {
+            "name": "krea2_model"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "krea2_text_encoder",
+          "name": "krea2_text_encoder",
+          "type": "COMBO",
+          "widget": {
+            "name": "krea2_text_encoder"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "krea2_vae",
+          "name": "krea2_vae",
+          "type": "COMBO",
+          "widget": {
+            "name": "krea2_vae"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "krea2_identity_lora",
+          "name": "krea2_identity_lora",
+          "type": "COMBO",
+          "widget": {
+            "name": "krea2_identity_lora"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "h3_model",
+          "name": "h3_model",
+          "type": "COMBO",
+          "widget": {
+            "name": "h3_model"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "h3_text_encoder",
+          "name": "h3_text_encoder",
+          "type": "COMBO",
+          "widget": {
+            "name": "h3_text_encoder"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "h3_vae",
+          "name": "h3_vae",
+          "type": "COMBO",
+          "widget": {
+            "name": "h3_vae"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "h3_turbo_lora",
+          "name": "h3_turbo_lora",
+          "type": "COMBO",
+          "widget": {
+            "name": "h3_turbo_lora"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "clear_cache_after",
+          "name": "clear_cache_after",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "clear_cache_after"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "h3_strength",
+          "name": "h3_strength",
+          "type": "FLOAT",
+          "widget": {
+            "name": "h3_strength"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "h3_resolution",
+          "name": "h3_resolution",
+          "type": "COMBO",
+          "widget": {
+            "name": "h3_resolution"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "aspect_ratio",
+          "name": "aspect_ratio",
+          "type": "COMBO",
+          "widget": {
+            "name": "aspect_ratio"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "h3_ref_size",
+          "name": "h3_ref_size",
+          "type": "COMBO",
+          "widget": {
+            "name": "h3_ref_size"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "video",
+          "name": "video",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "video"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "video_seconds",
+          "name": "video_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "video_seconds"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "video_resolution",
+          "name": "video_resolution",
+          "type": "COMBO",
+          "widget": {
+            "name": "video_resolution"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "video_motion",
+          "name": "video_motion",
+          "type": "STRING",
+          "widget": {
+            "name": "video_motion"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "h3_audio_vae",
+          "name": "h3_audio_vae",
+          "type": "COMBO",
+          "widget": {
+            "name": "h3_audio_vae"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "create",
+          "name": "create",
+          "type": "COMBO",
+          "widget": {
+            "name": "create"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "expanded",
+          "name": "expanded",
+          "type": "STRING",
+          "widget": {
+            "name": "expanded"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "image_resolution",
+          "name": "image_resolution",
+          "type": "COMBO",
+          "widget": {
+            "name": "image_resolution"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "image_aspect",
+          "name": "image_aspect",
+          "type": "COMBO",
+          "widget": {
+            "name": "image_aspect"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "sampler_name",
+          "name": "sampler_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "sampler_name"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "scheduler",
+          "name": "scheduler",
+          "type": "COMBO",
+          "widget": {
+            "name": "scheduler"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "face_steps",
+          "name": "face_steps",
+          "type": "INT",
+          "widget": {
+            "name": "face_steps"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "face_denoise",
+          "name": "face_denoise",
+          "type": "FLOAT",
+          "widget": {
+            "name": "face_denoise"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "face_sampler",
+          "name": "face_sampler",
+          "type": "COMBO",
+          "widget": {
+            "name": "face_sampler"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "face_scheduler",
+          "name": "face_scheduler",
+          "type": "COMBO",
+          "widget": {
+            "name": "face_scheduler"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "klein3_model",
+          "name": "klein3_model",
+          "type": "COMBO",
+          "widget": {
+            "name": "klein3_model"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "klein3_text_encoder",
+          "name": "klein3_text_encoder",
+          "type": "COMBO",
+          "widget": {
+            "name": "klein3_text_encoder"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "klein3_upsampler",
+          "name": "klein3_upsampler",
+          "type": "COMBO",
+          "widget": {
+            "name": "klein3_upsampler"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "image",
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            2
+          ]
+        },
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "localized_name": "video",
+          "name": "video",
+          "type": "VIDEO",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SceneRefStudio",
+        "srPromptH": 180,
+        "srStudioV": 3
+      },
+      "widgets_values": [
+        "FLUX.2 Klein 9B",
+        "",
+        false,
+        true,
+        "",
+        0,
+        "randomize",
+        4,
+        1,
+        0.75,
+        "depth",
+        0.6,
+        true,
+        "SceneRef/studio",
+        "auto",
+        "auto",
+        "auto",
+        "auto",
+        "auto",
+        "auto",
+        "auto",
+        "auto",
+        "[]",
+        "[]",
+        "off",
+        0.4,
+        4,
+        "auto",
+        "auto",
+        "auto",
+        "auto",
+        "auto",
+        "auto",
+        "auto",
+        "auto",
+        true,
+        0.85,
+        "auto",
+        "as framed",
+        "match",
+        false,
+        5,
+        "0.4 MP (fast)",
+        "",
+        "auto",
+        "image",
+        "",
+        "as framed",
+        "as framed",
+        "euler",
+        "flux2",
+        8,
+        0.75,
+        "euler",
+        "flux2",
+        "auto",
+        "auto",
+        "auto"
+      ],
+      "widgets_values_named": {
+        "create": "image",
+        "backend": "FLUX.2 Klein 9B",
+        "action": "",
+        "expander_model": "auto",
+        "room_details": true,
+        "seed": 0,
+        "control_after_generate": "randomize",
+        "image_resolution": "as framed",
+        "image_aspect": "as framed",
+        "video_seconds": 5,
+        "video_resolution": "0.4 MP (fast)",
+        "aspect_ratio": "as framed",
+        "clear_cache_after": true,
+        "steps": 4,
+        "cfg": 1,
+        "sampler_name": "euler",
+        "scheduler": "flux2",
+        "klein3_upsampler": "auto",
+        "control_strength": 0.75,
+        "control_mode": "depth",
+        "ref_megapixels": 0.6,
+        "ref_boost": 4,
+        "face_pass": true,
+        "face_steps": 8,
+        "face_denoise": 0.75,
+        "face_sampler": "euler",
+        "face_scheduler": "flux2",
+        "h3_ref_size": "match",
+        "klein_model": "auto",
+        "klein_text_encoder": "auto",
+        "klein_vae": "auto",
+        "klein3_model": "auto",
+        "klein3_text_encoder": "auto",
+        "qwen_model": "auto",
+        "qwen_text_encoder": "auto",
+        "qwen_vae": "auto",
+        "qwen_controlnet": "auto",
+        "krea2_model": "auto",
+        "krea2_text_encoder": "auto",
+        "krea2_vae": "auto",
+        "krea2_identity_lora": "auto",
+        "h3_model": "auto",
+        "h3_text_encoder": "auto",
+        "h3_vae": "auto",
+        "h3_audio_vae": "auto",
+        "expand": false,
+        "style": "",
+        "filename_prefix": "SceneRef/studio",
+        "cast_json": "[]",
+        "loras_json": "[]",
+        "identity_pass": "off",
+        "identity_strength": 0.4,
+        "h3_turbo_lora": "auto",
+        "h3_strength": 0.85,
+        "h3_resolution": "auto",
+        "video": false,
+        "video_motion": "",
+        "expanded": ""
+      }
+    },
+    {
+      "id": 3,
+      "type": "SceneRefOutput",
+      "pos": [
+        1160,
+        60
+      ],
+      "size": [
+        360,
+        320
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "image",
+          "name": "image",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 2
+        },
+        {
+          "localized_name": "video",
+          "name": "video",
+          "shape": 7,
+          "type": "VIDEO",
+          "link": null
+        },
+        {
+          "localized_name": "save_mode",
+          "name": "save_mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "save_mode"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "SceneRefOutput"
+      },
+      "widgets_values": [
+        "manual",
+        "SceneRef/studio"
+      ],
+      "widgets_values_named": {
+        "save_mode": "manual",
+        "filename_prefix": "SceneRef/studio"
+      }
+    },
+    {
+      "id": 4,
+      "type": "Note",
+      "pos": [
+        40,
+        620
+      ],
+      "size": [
+        470,
+        200
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "Scene from pictures\n\n1. On SceneRef Scene press ＋ picture and add the main view: the camera. The result keeps its angle, framing and furniture.\n2. Optional: add the same place from other angles (role 'other angle'). The model gets them as extra references.\n3. Or wire Load Image nodes into main_view / other_angles, or pick a .scene file made with SceneRef Scene Maker.\n4. In the Studio add the cast, write the action (who is where: there are no mannequins), press ✎ Write the picture prompt, then Run."
+      ],
+      "widgets_values_named": {
+        "text": "Scene from pictures\n\n1. On SceneRef Scene press ＋ picture and add the main view: the camera. The result keeps its angle, framing and furniture.\n2. Optional: add the same place from other angles (role 'other angle'). The model gets them as extra references.\n3. Or wire Load Image nodes into main_view / other_angles, or pick a .scene file made with SceneRef Scene Maker.\n4. In the Studio add the cast, write the action (who is where: there are no mannequins), press ✎ Write the picture prompt, then Run."
+      },
+      "color": "#432",
+      "bgcolor": "#653"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "SCENEREF_SHOT"
+    ],
+    [
+      2,
+      2,
+      0,
+      3,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1,
+      "offset": [
+        157,
+        171
+      ]
+    }
+  },
+  "version": 0.4
+}

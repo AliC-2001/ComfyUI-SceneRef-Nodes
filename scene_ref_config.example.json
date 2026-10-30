@@ -1,0 +1,12 @@
+{
+  "_help": "Copy to scene_ref_config.json and edit. Empty paths = auto-detect. See README.md > Configuration.",
+  "blender": "",
+  "daz": "",
+  "max_texture": 2048,
+  "draco": true,
+  "daz_headless": false,
+  "daz_timeout_s": 3600,
+  "blender_timeout_s": 3600,
+  "keep_daz_obj": false,
+  "llama_server": ""
+}

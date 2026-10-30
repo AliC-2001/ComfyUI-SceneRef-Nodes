@@ -1,0 +1,329 @@
+{
+  "id": "75e5f607-d85e-4809-b8b1-42f7d8fecbdf",
+  "revision": 0,
+  "last_node_id": 4,
+  "last_link_id": 2,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Note",
+      "pos": [
+        0,
+        -330
+      ],
+      "size": [
+        600,
+        300
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "SceneRef - Character Maker (.char)\n\nMakes an OmniChar .char in models/characters, for the Studio's Cast list (and OmniChar Studio).\n\n1. Name the character; add face / body / outfit pictures with + picture (several face photos from different angles help most).\n2. Optional: describe_with_ai writes a face and body description with Qwen3-VL.\n3. Optional voice: load 5 to 30 s of clear speech (no music) in Load Audio; it is cleaned up (mono 32 kHz, silence trimmed, level evened) and stored for MiniMax H3 movies. Delete the Load Audio node for no voice.\n4. Run. The text box on the node lists the pictures and what looks wrong (no face, blurred, someone else, the same photo twice).\n\nThe file keeps the original photos; SceneRef crops small faces when it uses them."
+      ],
+      "widgets_values_named": {
+        "text": "SceneRef - Character Maker (.char)\n\nMakes an OmniChar .char in models/characters, for the Studio's Cast list (and OmniChar Studio).\n\n1. Name the character; add face / body / outfit pictures with + picture (several face photos from different angles help most).\n2. Optional: describe_with_ai writes a face and body description with Qwen3-VL.\n3. Optional voice: load 5 to 30 s of clear speech (no music) in Load Audio; it is cleaned up (mono 32 kHz, silence trimmed, level evened) and stored for MiniMax H3 movies. Delete the Load Audio node for no voice.\n4. Run. The text box on the node lists the pictures and what looks wrong (no face, blurred, someone else, the same photo twice).\n\nThe file keeps the original photos; SceneRef crops small faces when it uses them."
+      },
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 2,
+      "type": "LoadAudio",
+      "pos": [
+        0,
+        0
+      ],
+      "size": [
+        340,
+        136
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "COMBO",
+          "widget": {
+            "name": "audio"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "audioUI",
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "choose file to upload",
+          "name": "upload",
+          "type": "AUDIOUPLOAD",
+          "widget": {
+            "name": "upload"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "AUDIO",
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        null,
+        ""
+      ],
+      "widgets_values_named": {
+        "audio": null,
+        "upload": ""
+      }
+    },
+    {
+      "id": 3,
+      "type": "SceneRefCharacterMaker",
+      "pos": [
+        380,
+        0
+      ],
+      "size": [
+        480,
+        440
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "face",
+          "name": "face",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "body",
+          "name": "body",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "outfit",
+          "name": "outfit",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "voice",
+          "name": "voice",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 1
+        },
+        {
+          "localized_name": "name",
+          "name": "name",
+          "type": "STRING",
+          "widget": {
+            "name": "name"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "description",
+          "name": "description",
+          "type": "STRING",
+          "widget": {
+            "name": "description"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "describe_with_ai",
+          "name": "describe_with_ai",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "describe_with_ai"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "source",
+          "name": "source",
+          "type": "COMBO",
+          "widget": {
+            "name": "source"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "max_pictures",
+          "name": "max_pictures",
+          "type": "INT",
+          "widget": {
+            "name": "max_pictures"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "overwrite",
+          "name": "overwrite",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "overwrite"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "describe_model",
+          "name": "describe_model",
+          "type": "COMBO",
+          "widget": {
+            "name": "describe_model"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "pictures_json",
+          "name": "pictures_json",
+          "type": "STRING",
+          "widget": {
+            "name": "pictures_json"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "refmod_vae",
+          "name": "refmod_vae",
+          "shape": 7,
+          "type": "COMBO",
+          "widget": {
+            "name": "refmod_vae"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "file",
+          "name": "file",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "localized_name": "description",
+          "name": "description",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "localized_name": "pictures",
+          "name": "pictures",
+          "type": "IMAGE",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SceneRefCharacterMaker"
+      },
+      "widgets_values": [
+        "My Character",
+        "",
+        false,
+        "(pictures only)",
+        8,
+        false,
+        "auto",
+        "[]",
+        "auto"
+      ],
+      "widgets_values_named": {
+        "name": "My Character",
+        "description": "",
+        "describe_with_ai": false,
+        "source": "(pictures only)",
+        "max_pictures": 8,
+        "overwrite": false,
+        "describe_model": "auto",
+        "pictures_json": "[]",
+        "refmod_vae": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "PreviewImage",
+      "pos": [
+        900,
+        0
+      ],
+      "size": [
+        300,
+        300
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      }
+    }
+  ],
+  "links": [
+    [
+      1,
+      2,
+      0,
+      3,
+      3,
+      "AUDIO"
+    ],
+    [
+      2,
+      3,
+      2,
+      4,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}

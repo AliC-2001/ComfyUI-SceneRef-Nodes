@@ -1,0 +1,292 @@
+// SceneRef - headless Daz Studio exporter.
+// Args (App.scriptArgs): [0] scene .duf path, [1] output directory.
+// Writes <out>/scene.obj (+ .mtl), <out>/scene_info.json (cameras, lights, units)
+// and <out>/daz_status.json ("ok" or the error), then quits.
+(function () {
+	var args = App.scriptArgs;
+	var scenePath = args.length > 0 ? args[0] : "";
+	var outDir = args.length > 1 ? args[1] : "";
+
+	function writeText(path, text) {
+		var f = new DzFile(path);
+		f.open(DzFile.WriteOnly | DzFile.Truncate);
+		f.write(text);
+		f.close();
+	}
+	function status(state, message) {
+		writeText(outDir + "/daz_status.json", JSON.stringify({ state: state, message: message || "" }));
+	}
+	// OBJ has no refraction, so Iray glass (black or grey diffuse + Refraction
+	// Weight) came out as opaque panels. In this in-memory copy of the scene only
+	// (nothing is saved), refractive surfaces become 15% opaque and light: the OBJ
+	// then carries "d 0.15", which the viewer shows as glass and sees through.
+	function glassify() {
+		var count = 0;
+		var nodes = Scene.getNodeList();
+		for (var i = 0; i < nodes.length; i++) {
+			var obj = nodes[i].getObject();
+			var shape = obj ? obj.getCurrentShape() : null;
+			if (!shape) { continue; }
+			for (var j = 0; j < shape.getNumMaterials(); j++) {
+				var m = shape.getMaterial(j);
+				var rw = m.findProperty("Refraction Weight");
+				if (!rw || rw.getValue() < 0.5) { continue; }
+				var co = m.findProperty("Cutout Opacity");
+				if (co) { co.setValue(0.15); }
+				var dc = m.findProperty("Diffuse Color");
+				if (dc && dc.inherits("DzColorProperty")) { dc.setColorValue(new Color(222, 230, 234)); }
+				count++;
+			}
+		}
+		return count;
+	}
+	// ── figures: posed Genesis characters become SceneRef figures ──────────────
+	// A main figure is a visible DzFigure that follows nothing (clothing and hair
+	// follow a figure). Its members are itself, everything that follows it, and
+	// every node parented under any of those (props in hands, geografts).
+	function mainFigureOf(n) {
+		var seen = 0;
+		while (n && seen++ < 64) {
+			if (n.inherits("DzSkeleton")) {
+				var t = n.getFollowTarget ? n.getFollowTarget() : null;
+				if (t) { n = t; continue; }
+				if (n.inherits("DzFigure")) { return n; }
+			}
+			// Strand hair is unparented on load and names its figure as a target;
+			// geometry shells do the same.
+			var target = null;
+			try {
+				if (typeof n.getTargetNode === "function") { target = n.getTargetNode(); }
+				else if (n.inherits("DzGeometryShellNode")) { target = n.getTarget(); }
+			} catch (e0) {}
+			n = target || n.getNodeParent();
+		}
+		return null;
+	}
+	// Daz rigs props as figures too (doors, appliances, drapes, loose shoes): only a
+	// skeleton with a head, both hands and both feet counts as a person.
+	function hasBone(fig, names) {
+		for (var i = 0; i < names.length; i++) { if (fig.findBone(names[i])) { return true; } }
+		return false;
+	}
+	function isPerson(fig) {
+		if (typeof fig.findBone !== "function") { return false; }
+		return hasBone(fig, ["head"]) && hasBone(fig, ["lHand", "l_hand"]) && hasBone(fig, ["rHand", "r_hand"]) &&
+			hasBone(fig, ["lFoot", "l_foot"]) && hasBone(fig, ["rFoot", "r_foot"]);
+	}
+	function idOf(n) {
+		return n.elementID !== undefined ? String(n.elementID) : n.getName() + "|" + n.getLabel();
+	}
+	// Script wrappers of one node are not ===, so nodes are matched by element id.
+	// Bones are left out: hiding a bone hides that body part in the export.
+	function collectFigures() {
+		var nodes = Scene.getNodeList();
+		var figs = [];
+		var byId = {};
+		for (var i = 0; i < nodes.length; i++) {
+			var n = nodes[i];
+			if (n.inherits("DzFigure") && !(n.getFollowTarget && n.getFollowTarget()) && n.isVisible() && isPerson(n)) {
+				byId[idOf(n)] = figs.length;
+				figs.push({ node: n, members: [], label: n.getLabel(), name: n.getName() });
+			}
+		}
+		for (var j = 0; j < nodes.length; j++) {
+			if (nodes[j].inherits("DzBone")) { continue; }
+			var root = mainFigureOf(nodes[j]);
+			var k = root ? byId[idOf(root)] : undefined;
+			if (k !== undefined) { figs[k].members.push(nodes[j]); }
+		}
+		return figs;
+	}
+	// Joint positions (metres) by trying Genesis 8 / 3 names first, then Genesis 9.
+	var BONES = {
+		head: ["head"], neck: ["neckLower", "neck1", "neck"], pelvis: ["pelvis", "hip"],
+		l_eye: ["lEye", "l_eye"], r_eye: ["rEye", "r_eye"],
+		l_shoulder: ["lShldrBend", "lShldr", "l_upperarm"], r_shoulder: ["rShldrBend", "rShldr", "r_upperarm"],
+		l_elbow: ["lForearmBend", "lForeArm", "l_forearm"], r_elbow: ["rForearmBend", "rForeArm", "r_forearm"],
+		l_wrist: ["lHand", "l_hand"], r_wrist: ["rHand", "r_hand"],
+		l_hip: ["lThighBend", "lThigh", "l_thigh"], r_hip: ["rThighBend", "rThigh", "r_thigh"],
+		l_knee: ["lShin", "l_shin"], r_knee: ["rShin", "r_shin"],
+		l_ankle: ["lFoot", "l_foot"], r_ankle: ["rFoot", "r_foot"]
+	};
+	function figureJoints(fig) {
+		var out = {};
+		for (var key in BONES) {
+			var names = BONES[key];
+			for (var i = 0; i < names.length; i++) {
+				var b = fig.findBone ? fig.findBone(names[i]) : null;
+				if (b) { var p = b.getWSPos(); out[key] = [p.x * 0.01, p.y * 0.01, p.z * 0.01]; break; }
+			}
+		}
+		var hip = fig.findBone ? (fig.findBone("pelvis") || fig.findBone("hip")) : null;
+		out.forward = [0, 0, 1];
+		if (hip) {
+			var f = hip.getWSRot().multVec(new DzVec3(0, 0, 1));
+			out.forward = [f.x, f.y, f.z];
+		}
+		return out;
+	}
+	function exportObj(exporter, path, settings) {
+		var res = exporter.writeFile(path, settings);
+		print("SceneRef: obj export " + path + " -> " + res);
+		return Number(res) === 0;
+	}
+	function camValue(n, getter, propLabel) {
+		try {
+			if (typeof n[getter] === "function") { return Number(n[getter]()) || 0; }
+		} catch (e1) {}
+		try {
+			var prop = propLabel ? n.findProperty(propLabel) : null;
+			if (prop) { return Number(prop.getValue()) || 0; }
+		} catch (e2) {}
+		return 0;
+	}
+	function v3(v) { return [v.x, v.y, v.z]; }
+	// DzQuat is the conjugate of the usual (three.js / glTF) rotation: Daz's own
+	// multVec turns a camera with q.x > 0 downwards, three.js turns it upwards.
+	function q4(q) { return [-q.x, -q.y, -q.z, q.w]; }
+
+	try {
+		if (!scenePath || !outDir) { throw "missing script arguments"; }
+		status("loading", scenePath);
+		var err = Scene.loadScene(scenePath, Scene.OpenNew);
+		print("SceneRef: opened " + scenePath + " -> " + err);
+		status("exporting", "");
+		print("SceneRef: glass surfaces made see-through: " + glassify());
+
+		var exporter = App.getExportMgr().findExporterByClassName("DzObjExporter");
+		if (!exporter) { throw "OBJ exporter plugin not found"; }
+		var s = new DzFileIOSettings();
+		exporter.getDefaultOptions(s);
+		s.setStringValue("Preset", "Custom");
+		// "Scale" is "1 OBJ unit = Scale cm" (0.01 gave coordinates 10000x too big),
+		// so 100 writes metres.
+		s.setFloatValue("Scale", 100);
+		s.setStringValue("LatAxis", "X");
+		s.setStringValue("VertAxis", "Y");
+		s.setStringValue("DepthAxis", "Z");
+		s.setBoolValue("InvertLat", false);
+		s.setBoolValue("InvertVert", false);
+		s.setBoolValue("InvertDepth", false);
+		s.setBoolValue("IgnoreInvisible", true);
+		s.setBoolValue("WeldSeams", false);
+		s.setBoolValue("RemoveUnusedVerts", true);
+		s.setBoolValue("WriteVN", true);
+		s.setBoolValue("WriteVT", true);
+		s.setBoolValue("WriteF", true);
+		s.setBoolValue("WriteL", false);
+		s.setBoolValue("WriteG", true);
+		s.setBoolValue("GroupNodes", true);
+		s.setBoolValue("GroupSurfaces", false);
+		s.setBoolValue("GroupGeom", false);
+		s.setBoolValue("GroupSingle", false);
+		s.setBoolValue("WriteO", false);
+		s.setBoolValue("WriteUsemtl", true);
+		s.setBoolValue("WriteMtllib", true);
+		s.setBoolValue("CollectMaps", false);
+		s.setBoolValue("ConvertMaps", false);
+		s.setBoolValue("PrimaryRootOnly", false);
+		s.setBoolValue("PrimarySelection", false);
+		s.setIntValue("RunSilent", 1);
+		print("SceneRef: obj options " + s.toJsonString());
+
+		// Figures go to their own OBJ files: hide them for the scene export, then
+		// export each one alone. Only this in-memory copy changes; nothing is saved.
+		var figs = collectFigures();
+		print("SceneRef: figures " + figs.length);
+		var all = [];
+		var everything = Scene.getNodeList();
+		for (var b = 0; b < everything.length; b++) {
+			if (!everything[b].inherits("DzBone")) { all.push(everything[b]); }
+		}
+		var wasVisible = [];
+		for (var a = 0; a < all.length; a++) { wasVisible.push(all[a].isVisible()); }
+		function restoreVisibility() {
+			for (var r = 0; r < all.length; r++) { all[r].setVisible(wasVisible[r]); }
+		}
+		for (var f1 = 0; f1 < figs.length; f1++) {
+			for (var m1 = 0; m1 < figs[f1].members.length; m1++) { figs[f1].members[m1].setVisible(false); }
+		}
+		var res = exporter.writeFile(outDir + "/scene.obj", s);
+		print("SceneRef: obj export -> " + res);
+		var figInfo = [];
+		for (var f2 = 0; f2 < figs.length; f2++) {
+			for (var h = 0; h < all.length; h++) { all[h].setVisible(false); }
+			var fig = figs[f2];
+			for (var m2 = 0; m2 < fig.members.length; m2++) {
+				// The member, plus parents without geometry (a figure inside a group
+				// node). A chair the figure is parented to stays hidden.
+				fig.members[m2].setVisible(true);
+				var p = fig.members[m2].getNodeParent();
+				while (p) {
+					if (!p.getObject()) { p.setVisible(true); }
+					p = p.getNodeParent();
+				}
+			}
+			var file = "figure_" + f2 + ".obj";
+			if (exportObj(exporter, outDir + "/" + file, s)) {
+				figInfo.push({ index: f2, label: fig.label, name: fig.name, file: file,
+					members: fig.members.length, joints: figureJoints(fig.node) });
+			}
+		}
+		restoreVisibility();
+
+		// Cameras and lights, in the same metres / Y-up space as the OBJ.
+		var info = { units: "m", source: scenePath, cameras: [], lights: [], figures: figInfo, figure_scan: [] };
+		// What the figure search saw, for troubleshooting a scene whose people stay in the room mesh.
+		for (var sk = 0; sk < all.length; sk++) {
+			if (!all[sk].inherits("DzSkeleton")) { continue; }
+			var ft = null;
+			try { ft = all[sk].getFollowTarget ? all[sk].getFollowTarget() : null; } catch (e5) {}
+			info.figure_scan.push({ label: all[sk].getLabel(), cls: all[sk].className(),
+				figure: all[sk].inherits("DzFigure"), follows: ft ? String(ft.getLabel()) : "",
+				follow_type: typeof ft, visible: wasVisible[sk] });
+		}
+		var nodes = Scene.getNodeList();
+		for (var i = 0; i < nodes.length; i++) {
+			var n = nodes[i];
+			var p = n.getWSPos();
+			var pos = [p.x * 0.01, p.y * 0.01, p.z * 0.01];
+			// Daz lights inherit the camera classes, so they are tested first.
+			if (n.inherits("DzLight")) {
+				var light = { name: n.getLabel(), type: n.className(), position: pos,
+					rotation: q4(n.getWSRot()), visible: n.isVisible() };
+				try { var c = n.getDiffuseColor(); light.color = [c.red / 255, c.green / 255, c.blue / 255]; } catch (e1) {}
+				try { light.intensity = n.getIntensity(); } catch (e2) {}
+				info.lights.push(light);
+			} else if (n.inherits("DzCamera")) {
+				var cam = { name: n.getLabel(), position: pos, rotation: q4(n.getWSRot()) };
+				// Not every camera type has every getter; fall back to its properties.
+				var fl = camValue(n, "getFocalLength", "Focal Length");
+				var fw = camValue(n, "getFrameWidth", "Frame Width");
+				var fov = camValue(n, "getFieldOfView", null);
+				if (!fov && fl && fw) { fov = 2 * Math.atan(fw / (2 * fl)); }
+				// No field of view: a light blocker or other camera-like helper. Leaving
+				// "fov" out keeps it out of the camera list.
+				if (fov) {
+					cam.fov = fov;
+					cam.focal_length = fl;
+					cam.frame_width = fw;
+					cam.aspect = camValue(n, "getAspectRatio", null);
+				}
+				info.cameras.push(cam);
+			}
+		}
+		// The viewport's current camera, so the viewer can start where Daz was looking.
+		try {
+			var vm = MainWindow.getViewportMgr();
+			var vp = vm.getActiveViewport().get3DViewport();
+			var vc = vp.getCamera();
+			info.viewport = { name: vc.getLabel(), position: v3(vc.getWSPos()).map(function (x) { return x * 0.01; }),
+				rotation: q4(vc.getWSRot()), fov: vc.getFieldOfView ? vc.getFieldOfView() : 0 };
+		} catch (e3) { print("SceneRef: no viewport camera (" + e3 + ")"); }
+		writeText(outDir + "/scene_info.json", JSON.stringify(info, null, 1));
+		// writeFile returns a DzError; 0 / DZ_NO_ERROR is success.
+		var failed = Number(res) !== 0;
+		status(failed ? "error" : "ok", failed ? ("OBJ export returned " + getErrorMessage(res)) : "");
+	} catch (e) {
+		print("SceneRef: FAILED " + e);
+		try { status("error", String(e)); } catch (e4) {}
+	}
+	App.delayedExit();
+})();

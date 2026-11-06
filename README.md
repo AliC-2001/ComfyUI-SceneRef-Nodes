@@ -12,7 +12,7 @@ place work too.
 The **SceneRef Studio** node then does the rest in one place: who is in the picture (from `.char`
 files, DaSiWa RefMods or plain photos), the LoRAs, a vision model that writes the prompt, and the
 whole generation graph for **FLUX.2 Klein 9B**, **FLUX.3 Klein**, **Qwen-Image 2.1 + ControlNet**,
-**Krea 2 + identity edit** or **MiniMax H3** (movies with sound and voices).
+**Krea 2 + identity edit**, **MOSS-Image + scene control** or **MiniMax H3** (movies with sound and voices).
 
 > **Status:** an early public release by one person, tested on Windows 11 with a 16 GB NVIDIA card,
 > ComfyUI 0.43 and its new frontend (Nodes 2.0 on and off). The Blender side is cross-platform; the
@@ -52,6 +52,7 @@ What the viewer outputs:
 | `glb_path` | the converted scene (GLB), for other 3D nodes |
 | `width`, `height` | the picture size, ready for an empty latent or a scheduler |
 | `shot` | everything above in one wire, for the **SceneRef Studio** |
+| `regions` | which object is where: one flat colour per object (a figure is one object), black = nothing or a speck. The colour map for MOSS-Image's colour/depth control |
 
 `depth`, `normal` and `mask` include the people as shapes, so a depth ControlNet places the bodies
 and the furniture that hides them.
@@ -82,7 +83,7 @@ and the furniture that hides them.
 
 | what | needed for | notes |
 |---|---|---|
-| A recent ComfyUI with the new frontend | everything | tested with ComfyUI 0.43 on Windows 11; FLUX.3 Klein needs 0.41.2 or newer |
+| A recent ComfyUI with the new frontend | everything | tested with ComfyUI 0.44 on Windows 11; FLUX.3 Klein needs 0.41.2 or newer, MOSS-Image 0.43 or newer |
 | A WebGL2 browser (Chrome, Edge, Brave, Firefox) | the 3D viewer | the view is rendered **in the browser**, so a GPU-backed browser matters for big scenes |
 | **Blender 4.2 or newer** | `.blend` files **and** `.duf` files | tested with Blender 5.1. Daz scenes are finished in Blender too |
 | **Daz Studio 4.x** | `.duf` files | tested with Daz Studio 4.24 (Windows) |
@@ -155,6 +156,7 @@ Studio finds them by name (`auto`); if yours are named differently, pick them un
 | FLUX.3 Klein | `flux3-image-klein-int8-convrot.safetensors` (diffusion_models), a Qwen3-VL 4B text encoder such as `qwen3vl_4b_int8_convrot.safetensors` (text_encoders), `flux2-vae.safetensors` (vae), and for ✎ BFL's prompt upsampler `qwen3.5_9b_flux3_prompt_upsampler_*.safetensors` (text_encoders). See [FLUX.3 Klein](#flux3-klein) |
 | Qwen-Image 2.1 + ControlNet | a Qwen-Image 2.1 model such as `qwen_image_2.1_int8_convrot.safetensors` (diffusion_models), `qwen3vl_8b_int8_convrot.safetensors` (text_encoders), `qwen_image_2.1_vae_bf16.safetensors` (vae), the Qwen-Image 2.1 Fun ControlNet Union (model_patches) |
 | Krea2 + identity edit | `krea2_turbo_fp8_scaled.safetensors` (diffusion_models), `qwen3vl_4b_fp8_scaled.safetensors` (text_encoders), `qwen_image_vae.safetensors` (vae), `krea2_identity_edit_v1_2.safetensors` (loras), plus the comfyui-krea2edit nodes |
+| MOSS-Image + scene control | from [Comfy-Org/MOSS-Image](https://huggingface.co/Comfy-Org/MOSS-Image): `moss_image_sft_int8_convrot.safetensors` or another MOSS-Image SFT file (diffusion_models), `qwen3.5_9b_w4a8_gptq.safetensors` (text_encoders), `flux2-vae_small.safetensors` (vae), `moss_image_color_depth_control.safetensors` and `moss_image_edit_lora_rank_64_bf16.safetensors` (loras). The face pass uses FLUX.2 Klein's files |
 | MiniMax H3 (movies) | the H3 ref2va model (diffusion_models), `qwen3vl_32b_minimax_h3_*` (text_encoders), `minimax_h3_video_vae_fp16.safetensors` and `minimax_h3_audio_vae_fp32.safetensors` (vae) |
 | ✎ prompt writer, AI descriptions | a Qwen3-VL 8B file that still has its `lm_head` weights, in `text_encoders` or `models/LLM` (see [The prompt](#the-prompt)) |
 
@@ -576,6 +578,7 @@ What each backend does with it:
 | FLUX.2 Klein, FLUX.3 Klein | main view = image 1, then the cast (with `angles_in_pictures`: the angles as images 2…, then the cast) |
 | Qwen-Image 2.1 | the same, as `<image1>`, `<image2>` …; the ControlNet is off (a picture has no depth or pose) |
 | Krea2 + identity edit | main view only (the edit takes one person picture per pass); each character is added where the text says |
+| MOSS-Image | main view = image 1 (with `angles_in_pictures`: the angles next), then the cast, through the edit LoRA as an instruction (*"Add Emma, the person from image 2, to image 1 ..."*). The photo's framing is kept; the likeness is loose |
 | MiniMax H3 movie | main view = `<Picture 1>`, up to 3 other angles = `<Picture 2>` …, then the cast (9 pictures in all) |
 
 With the angles off, Klein keeps the photo's camera and puts the cast in it (about 25 s on a 16 GB
@@ -622,8 +625,8 @@ wire `image` and `video` into **SceneRef Preview & Save**.
 
 **`create` at the top picks what is made, and only that mode's settings are shown:**
 
-* **image**: a picture from **FLUX.2 Klein 9B**, **FLUX.3 Klein**, **Qwen-Image 2.1 + ControlNet**
-  or **Krea2 + identity edit**.
+* **image**: a picture from **FLUX.2 Klein 9B**, **FLUX.3 Klein**, **Qwen-Image 2.1 + ControlNet**,
+  **Krea2 + identity edit** or **MOSS-Image + scene control**.
 * **movie**: a clip with sound from **MiniMax H3 ref2va** (reference to video). The scene as the
   viewer frames it is `<Picture 1>`, with mannequins, Daz people or nobody in it; the characters'
   pictures follow; the prompt directs everything else. No first frame is pinned and no picture is
@@ -634,7 +637,7 @@ wire `image` and `video` into **SceneRef Preview & Save**.
 | setting | meaning |
 |---|---|
 | `create` | `image` or `movie`, see above |
-| `backend` | image: **FLUX.2 Klein 9B** (4 steps, fast, most photographic), **FLUX.3 Klein** (16 steps; its prompt is a full scene caption from BFL's prompt upsampler, see [FLUX.3 Klein](#flux3-klein)), **Qwen-Image 2.1 + ControlNet** (25 steps; the Qwen-Image 2.1 Fun ControlNet Union holds every body exactly where its figure stands) or **Krea2 + identity edit** (one pass per person, see below) |
+| `backend` | image: **FLUX.2 Klein 9B** (4 steps, fast, most photographic), **FLUX.3 Klein** (16 steps; its prompt is a full scene caption from BFL's prompt upsampler, see [FLUX.3 Klein](#flux3-klein)), **Qwen-Image 2.1 + ControlNet** (25 steps; the Qwen-Image 2.1 Fun ControlNet Union holds every body exactly where its figure stands), **Krea2 + identity edit** (one pass per person, see below) or **MOSS-Image + scene control** (25 steps; the room and the bodies come through MOSS's colour/depth control, the faces from the face pass, see [MOSS-Image](#moss-image)) |
 | `action` | what happens and how it should look, for the prompt writer only (it never goes into the prompt itself): *"Emma sleeps on the couch in a grey hoodie. Jack pours coffee at the table. Late night, light from the TV."* Name people as in the cast. For a movie: in order, speech in quotes after *says / asks*, camera moves if any |
 | `expander_model`, `room_details` | the vision model that writes the prompt, and whether it may add small objects and describe the light |
 | **✎ Write the prompt** and the prompt box | see [The prompt](#the-prompt) below. Drag the box's corner to make it bigger |
@@ -651,12 +654,14 @@ wire `image` and `video` into **SceneRef Preview & Save**.
 
 | setting | meaning |
 |---|---|
-| `steps`, `cfg`, `sampler_name`, `scheduler` | sampling, filled in with the model's usual values when you pick a backend or mode, then yours to change: Klein 4 / 1.0 / euler / `flux2` (Klein's own schedule, which follows the picture size), FLUX.3 Klein 16 / 1.0 / euler / simple (BFL's workflows), Qwen 25 / 1.0 / euler / simple, Krea2 10 / 1.0 / euler / simple, movie 20 / res_multistep / simple (ComfyUI's H3 template; a turbo model or LoRA needs fewer, e.g. 8). `cfg` is for pictures: H3 samples without CFG, as in ComfyUI's template |
+| `steps`, `cfg`, `sampler_name`, `scheduler` | sampling, filled in with the model's usual values when you pick a backend or mode, then yours to change: Klein 4 / 1.0 / euler / `flux2` (Klein's own schedule, which follows the picture size), FLUX.3 Klein 16 / 1.0 / euler / simple (BFL's workflows), Qwen 25 / 1.0 / euler / simple, Krea2 10 / 1.0 / euler / simple, MOSS-Image 25 / 3.0 / er_sde / simple (ComfyUI's MOSS templates), movie 20 / res_multistep / simple (ComfyUI's H3 template; a turbo model or LoRA needs fewer, e.g. 8). `cfg` is for pictures: H3 samples without CFG, as in ComfyUI's template |
 | `control_strength`, `control_mode` | Qwen only: how hard the ControlNet holds the layout (0 = off), and what it follows: `depth` (default), `pose`, or both |
 | `ref_megapixels` | FLUX.2 Klein only: size of each character picture (FLUX.3 Klein takes them at 1 MP, as BFL's workflows do; neither enlarges a picture) |
-| `face_pass` | on by default: after the picture is made, redo each visible face that belongs to a character on a mannequin, close up, from that character's face pictures only (FLUX.2 Klein, about 3 s per face; with FLUX.3 and no FLUX.2 Klein installed, FLUX.3 does it). Heads under about 96 px across are left as they are: blown up that far, the redone face came out bigger than the head. Klein and Qwen only |
+| `face_pass` | on by default: after the picture is made, redo each visible face that belongs to a character on a mannequin, close up, from that character's face pictures only (FLUX.2 Klein, about 3 s per face; with FLUX.3 and no FLUX.2 Klein installed, FLUX.3 does it). Heads under about 96 px across are left as they are: blown up that far, the redone face came out bigger than the head. Klein, Qwen and MOSS-Image (where it is what gives people their faces) |
 | `face_steps`, `face_denoise`, `face_sampler`, `face_scheduler` | the face pass's own sampling (8 / 0.75 / euler / flux2). Its short prompt (*"A close-up photograph of Emma, the person shown in image 1 …"*) is built for each face |
 | `ref_boost` | Krea2 only: how strongly the person picture is followed (default 4) |
+| `moss_control_strength`, `moss_control_end` | MOSS-Image: how hard and for how much of the run the depth and object map hold the scene (0.7 / 0.4; ComfyUI's template uses 1.0 / 0.6, which copies the mannequins' segmented limbs in close shots). 0 = off |
+| `moss_regions`, `moss_layout` | on the node with MOSS-Image: give the control the object map too (on), and write the prompt as MOSS's JSON layout (off; see [MOSS-Image](#moss-image)) |
 | `h3_ref_size` | movie: how big the character pictures go into H3: `match` (fast) or `max` (up to 2048 px, more likeness, several times slower) |
 | model selectors | show the file the Studio found for each (the tooltip names what it looks for); pick another only if yours differ. `h3_video_vae` and `h3_audio_vae` are H3's VAEs for picture and sound |
 | `cast`, `loras` sockets | optional: characters from Character nodes and LoRAs from a LoRA Stack, added to the lists on the node. `cast` grows: wire one and `cast_2`, `cast_3` ... appear (up to 8) |
@@ -697,6 +702,11 @@ mannequins; the vision model writes the scene, following that model's prompt gui
   and the poses stay. Needs the [comfyui-krea2edit](https://github.com/lbouaraba/comfyui-krea2edit)
   nodes (Apache-2.0) and the Krea2 turbo model, the Qwen3-VL 4B text encoder, the Qwen-Image VAE
   and `krea2_identity_edit_v1_2` in `models/loras/krea2/`. About 50 s per person on a 16 GB card.
+* *MOSS-Image*: who is where (*"Emma, a woman, is on the left of the picture, sitting, facing the
+  camera"*), then a caption written by the rules of OpenMOSS's own prompt enhancer: cohesive English
+  prose of what is visible (people and action, setting, framing, light, materials, palette, mood),
+  spatial relations in words, no quality tags. For a scene from pictures, a short edit instruction
+  instead. See [MOSS-Image](#moss-image).
 * *Movie*: H3's reference-mode format. `subject_definitions` (the scene as `<Subject 1>` from
   `<Picture 1>`, each character as a `<Subject N>` from their pictures), `summary` and
   `retention_analysis` are built from the cast; the vision model writes `detailed_description`
@@ -779,6 +789,35 @@ llama.cpp instead, see *Which upsampler* above.
 The model is under the FLUX Kommunity License (non-commercial use; commercial use of outputs for
 businesses under US$5M a year, see the license). The text encoder and the upsampler are Apache-2.0.
 FLUX.3 LoRAs trained on Klein Base go in the LoRA list as usual (BFL suggests strength 0.75).
+
+### MOSS-Image
+
+[MOSS-Image](https://github.com/OpenMOSS/MOSS-Image) (OpenMOSS, 5B, Apache-2.0) runs on ComfyUI's
+own nodes (0.43 or newer). The Studio gives it the scene as geometry instead of a picture: the
+viewer's `depth` and `regions` (a flat colour per object) go through MOSS's colour/depth control
+adapter, so the room, the furniture and every body keep their place and size within a few pixels,
+while the picture is drawn fresh, with no render look carried over. About 20 s for 1360 x 768 on a
+16 GB card (25 steps), plus a few seconds per face for the face pass.
+
+* **Faces come from the face pass**, not from MOSS. MOSS's edit LoRA can take reference pictures,
+  but in tests its likeness disappeared as soon as the control adapter was loaded (even at strength
+  0), and without control two people's pictures blended into one look. So in a 3D scene the Studio
+  gives MOSS no people pictures: the text names everyone with where they are, the control holds the
+  bodies, and the face pass redoes each face from the character's face pictures with FLUX.2 Klein.
+  Keep `face_pass` on and frame people big enough (heads of about 96 px or more), or they keep the
+  face MOSS drew.
+* **A scene from pictures** goes through the edit LoRA instead, as an edit instruction: the photo is
+  image 1 and keeps three quarters of the reference pixels (with an even split, the edit moved the
+  camera), the people follow. The photo's framing is kept; the people only loosely look like
+  their pictures, and the face pass can't help (no figures). Use Klein when faces matter there.
+* All reference pictures share 1 MP (the edit template's single picture). MOSS keeps every
+  reference's keys and values for all 42 blocks on both the positive and the negative, so 1 MP
+  each made a 16 GB card swap (about 60 s per step) or run out of memory.
+* `moss_layout` writes the prompt as MOSS's JSON layout (one `character` box per figure, in the
+  format OpenMOSS's prompt enhancer compiles to). With the control on it made no visible
+  difference; it is for `moss_control_strength` 0, where only the text places people.
+* Sampling follows ComfyUI's templates and the MOSS user guide: 25 steps, CFG 3, er_sde, simple,
+  skip-layer guidance on layer 22, the guide's negative prompt.
 
 ### SceneRef Preview & Save
 
@@ -1003,6 +1042,8 @@ Changing `max_texture` or `draco` re-converts scenes on their next open.
   relative size are kept.
 * Qwen-Image 2.1 with the ControlNet keeps more of the render's look (flat walls, clean light)
   than Klein. Say more about light and materials in the prompt, or use Klein for the final look.
+* MOSS-Image draws what the prompt names even where the scene has nothing: *"rain on the window"*
+  with a blank wall in view gave that wall a window. Name only what the scene has.
 * Krea2 sometimes copies a pattern from the person picture into the clothes (a camo top became a
   camo sweater) even when the text names other clothes. A face-only picture first in the card avoids it.
 * Clothing comes from the character pictures unless `action` or the Character `description`
@@ -1049,6 +1090,10 @@ The FLUX.3 Klein prompt uses Black Forest Labs' published upsampler system promp
 (`scene_ref/data/flux3_upsampler_prompts.json`, from
 [flux-3-image-klein-pup](https://huggingface.co/black-forest-labs/flux-3-image-klein-pup), Apache-2.0,
 unchanged). FLUX and Black Forest Labs are trademarks of Black Forest Labs; SceneRef is not affiliated with them.
+
+The MOSS-Image prompt follows the rules of OpenMOSS's `moss-image-prompt-enhancer` skill and
+its `references/layout.md` from [MOSS-Image](https://github.com/OpenMOSS/MOSS-Image) (Apache-2.0),
+rewritten, no code taken.
 
 The picture check uses OpenCV's **YuNet** face detector and **SFace** face recogniser from the
 [OpenCV Zoo](https://github.com/opencv/opencv_zoo) (Apache-2.0), loaded from your `models`

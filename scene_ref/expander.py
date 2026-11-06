@@ -120,6 +120,24 @@ GUIDES = {
         "ultra-detailed, cinematic) and no negations: describe what is there instead. One paragraph, 80 to 180 "
         "words. "
     ),
+    # OpenMOSS's own moss-image-prompt-enhancer skill (caption deliverable): cohesive English
+    # prose describing the visible choices, spatial relations in words, no quality tags.
+    "moss": (
+        "You write the scene description of a prompt for MOSS-Image, as a caption: cohesive English prose that "
+        "describes what is visible. Cover the subjects and their action and how they relate, the setting, the "
+        "camera and framing, the medium, the lighting (its source, direction and softness), the materials, the "
+        "palette and the mood. State spatial relations in words. Preserve the user's subjects, counts, "
+        "relationships, medium, style and exclusions; quote any visible text exactly. No redundant quality tags "
+        "(masterpiece, 8k, best quality, highres), no unrequested style changes, no coordinates. One paragraph. "
+    ),
+    # A scene from pictures goes through MOSS's edit LoRA: an edit instruction keeps the photo,
+    # a full caption makes it redraw the room and add the people twice (tested).
+    "moss_photo": (
+        "You write the end of an edit instruction for MOSS-Image: the photograph stays as it is and people are "
+        "added to it. In one or two short English sentences say only what each named person does, where in the "
+        "room, and what they wear, then the light. Do not describe the room, the furniture or the camera, and do "
+        "not mention anyone twice. "
+    ),
 }
 # MiniMax H3's reference-mode prompt guide (ref-en): the model writes the three free sections;
 # subject_definitions, summary and retention_analysis are built from the cast (exact labels).
@@ -251,15 +269,15 @@ def _sections(text: str) -> dict:
 
 def write_prompt(action, shot, cast, *, backend, movie=False, room_details=True, text_encoder=AUTO, triggers="",
                  control_strength=0.75, image_aspect=None, movie_aspect=None, video_seconds=5.0,
-                 upsampler=AUTO) -> str:
+                 upsampler=AUTO, image_resolution="as framed", moss_layout=False) -> str:
     """The Studio's 'Write the prompt': the complete prompt, as the Run will use it. The
     vision model writes the scene from the action, following the backend's prompt guide; the
     picture references, the mannequin lines (Klein / Qwen / Krea2) or the subject sections
     (H3) and the trigger words are added around it. The result goes into the prompt box, to
     be edited before Run."""
     from . import h3prompt
-    from .studio import (KLEIN, KLEIN3, KREA2, QWEN, aspect_crop, build_prompt, h3_frames, H3_FPS, join_passes,
-                         krea2_prompts, movie_layout, _shift_figures)
+    from .studio import (KLEIN, KLEIN3, KREA2, MOSS, QWEN, aspect_crop, build_prompt, h3_frames, H3_FPS,
+                         join_passes, krea2_prompts, moss_prompt, movie_layout, picture_size, _shift_figures)
 
     figures = ((shot or {}).get("figures") or [[]])[0] or []
     cast = scenes.plain_cast(shot, cast)
@@ -282,11 +300,15 @@ def write_prompt(action, shot, cast, *, backend, movie=False, room_details=True,
                               angles=[f"<Picture {i}>" for i in range(2, 2 + angles)])
     if backend == KLEIN3:
         return flux3_prompt(action, shot, cast, figures, (cw, ch_), room_details, text_encoder, triggers, upsampler)
-    key = {KLEIN: "klein", QWEN: "qwen", KREA2: "krea2"}[backend]
-    body = expand(action, shot, cast, room_details, max_words=200 if key != "krea2" else 180,
+    key = {KLEIN: "klein", QWEN: "qwen", KREA2: "krea2", MOSS: "moss_photo" if photo else "moss"}[backend]
+    body = expand(action, shot, cast, room_details, max_words={"krea2": 180, "moss_photo": 60}.get(key, 200),
                   text_encoder=text_encoder, guide=GUIDES[key]).strip() or action.strip()
     if backend == KREA2:
         return join_passes(krea2_prompts(figures, cast, body, triggers, photo))
+    if backend == MOSS:
+        return moss_prompt(figures, cast, body, triggers, size=(cw, ch_), photo=photo,
+                           angles=len(scenes.angles_of(shot)), layout=moss_layout,
+                           out_size=picture_size(cw, ch_, image_resolution))
     # Qwen with the ControlNet on gets the empty room as image 1 (see SceneRefStudio.run).
     marked = not (backend == QWEN and control_strength > 0 and figures)
     return build_prompt(figures, cast, body, backend, triggers, marked=marked, size=(cw, ch_), photo=photo,

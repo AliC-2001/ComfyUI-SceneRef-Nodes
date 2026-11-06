@@ -1480,14 +1480,17 @@ export class Viewer {
       // 3) figures: who owns each pixel, each full silhouette, keypoints.
       let fig = null;
       if (figs) fig = this._figurePasses(rt, w, h);
+      // 4) regions: which object owns each pixel (MOSS-Image's colour region map).
+      const regions = this._regionPass(rt, w, h);
       rt.dispose();
       const toBlob = (cv) => new Promise((res, rej) =>
         cv.toBlob((b) => (b ? res(b) : rej(new Error("could not encode PNG"))), "image/png"));
-      const list = [color, passes.depth, passes.normal, passes.mask, composite];
+      const list = [color, passes.depth, passes.normal, passes.mask, composite, regions];
       if (fig) list.push(fig.pose, fig.figmap);
       const blobs = await Promise.all(list.map(toBlob));
-      const out = { image: blobs[0], depth: blobs[1], normal: blobs[2], mask: blobs[3], composite: blobs[4] };
-      if (fig) { out.pose = blobs[5]; out.figmap = blobs[6]; }
+      const out = { image: blobs[0], depth: blobs[1], normal: blobs[2], mask: blobs[3], composite: blobs[4],
+        regions: blobs[5] };
+      if (fig) { out.pose = blobs[6]; out.figmap = blobs[7]; }
       const camera = this.cameraInfo(w, h, passes.near, passes.far);
       camera.figures = fig ? fig.info : [];
       return { ...out, camera };
@@ -1607,6 +1610,92 @@ export class Viewer {
     const pc = mk();
     drawOpenPose(pc.getContext("2d"), w, h, people);
     return { pose: pc, figmap: fm, info };
+  }
+
+  // Regions PNG: the id of the object you see at each pixel as 24-bit RGB (R low byte),
+  // 0 = no surface. One id per scene object and one per figure (all its meshes). A
+  // multi-material object, which the GLB loader splits into a group of meshes, counts once.
+  // Ids are only labels: the Studio turns them into one flat colour per region.
+  _regionPass(rt, w, h) {
+    const THREE = this.THREE;
+    const owners = new Map(); // mesh -> what it belongs to
+    const ownerOf = (o) => {
+      const p = o.parent;
+      const split = p && p.isGroup && p.children.length > 1 && p.children.every((c) => c.isMesh && !c.children.length);
+      return split ? p : o;
+    };
+    this.model?.traverse((o) => { if (o.isMesh) owners.set(o, ownerOf(o)); });
+    for (const f of this.figures) f.root.traverse((o) => { if (o.isMesh) owners.set(o, f); });
+    const ids = new Map();
+    for (const ow of owners.values()) if (!ids.has(ow)) ids.set(ow, ids.size + 1);
+    const made = [];
+    const swapped = [];
+    const hidden = [];
+    const regionMat = (m, id) => {
+      const cut = hasCutout(m);
+      const d = new THREE.ShaderMaterial({
+        vertexShader: DATA_VERT, fragmentShader: DATA_FRAG,
+        uniforms: {
+          map: { value: cut ? m.map : null }, useMap: { value: cut ? 1 : 0 }, alphaCut: { value: m.alphaTest || 0.5 },
+          idMode: { value: 1 }, figId: { value: id },
+        },
+        side: THREE.DoubleSide,
+      });
+      d.visible = !isGhost(m);
+      made.push(d);
+      return d;
+    };
+    // Everything else (gizmos, helpers, lines) stays out of the id picture.
+    this.scene.traverse((o) => {
+      if (owners.has(o)) {
+        const id = ids.get(owners.get(o));
+        swapped.push([o, o.material]);
+        o.material = Array.isArray(o.material) ? o.material.map((m) => regionMat(m, id)) : regionMat(o.material, id);
+      } else if ((o.isMesh || o.isLine || o.isPoints || o.isSprite) && o.visible) {
+        hidden.push(o);
+        o.visible = false;
+      }
+    });
+    const r = this.renderer;
+    const bg = this.scene.background;
+    const env = this.scene.environment;
+    const prevClear = r.getClearColor(new THREE.Color());
+    const prevAlpha = r.getClearAlpha();
+    const vis = this._setVisible({ figures: true, model: true });
+    let buf;
+    try {
+      this.scene.background = null;
+      this.scene.environment = null;
+      r.setRenderTarget(rt);
+      r.setClearColor(0x000000, 0);
+      r.clear();
+      r.render(this.scene, this.camera);
+      buf = this._readFloat(rt);
+    } finally {
+      r.setRenderTarget(null);
+      r.setClearColor(prevClear, prevAlpha);
+      this.scene.background = bg;
+      this.scene.environment = env;
+      vis();
+      for (const [o, m] of swapped) o.material = m;
+      for (const o of hidden) o.visible = true;
+      for (const d of made) d.dispose();
+    }
+    const cv = document.createElement("canvas");
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext("2d");
+    const img = ctx.createImageData(w, h);
+    for (let y = 0; y < h; y++) {
+      const src = (h - 1 - y) * w; // GL rows are bottom-up
+      for (let x = 0; x < w; x++) {
+        const id = Math.max(0, Math.round(buf[(src + x) * 4]));
+        const o = (y * w + x) * 4;
+        img.data[o] = id & 255; img.data[o + 1] = (id >> 8) & 255; img.data[o + 2] = (id >> 16) & 255;
+        img.data[o + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return cv;
   }
 
   _buildPasses(buf, w, h, depthCurve) {

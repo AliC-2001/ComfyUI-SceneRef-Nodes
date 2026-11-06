@@ -1070,14 +1070,14 @@ async function captureNode(node) {
   const shots = [];
   try {
     for (const view of views) {
-      const key = hash(JSON.stringify([3, sr.key, w, h, view.pos, view.quat, view.fov, v.look === "clay", p.light, p.exposure,
+      const key = hash(JSON.stringify([4, sr.key, w, h, view.pos, view.quat, view.fov, v.look === "clay", p.light, p.exposure,
         p.depthCurve, v.figureSpecs()]));
       let names = _uploaded.get(key);
       if (!names) {
         if (view !== views[0] || p.allShots) v.setView(view);
         const shot = await v.capture(w, h, { depthCurve: p.depthCurve });
         names = { camera: shot.camera };
-        for (const pass of ["image", "depth", "normal", "mask", "composite", "pose", "figmap"]) {
+        for (const pass of ["image", "depth", "normal", "mask", "composite", "regions", "pose", "figmap"]) {
           if (shot[pass]) names[pass] = await upload(shot[pass], `sr_${key}_${pass}.png`);
         }
         _uploaded.set(key, names);

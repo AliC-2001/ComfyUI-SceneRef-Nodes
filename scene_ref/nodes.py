@@ -18,7 +18,7 @@ from PIL import Image
 
 import folder_paths
 
-from . import jobs
+from . import jobs, moss
 
 CAPTURE_SUBFOLDER = "scene_ref"
 HIDDEN = "scene_ref_capture"
@@ -108,9 +108,9 @@ class SceneRefViewer:
     CATEGORY = "SceneRef"
     FUNCTION = "run"
     RETURN_TYPES = ("IMAGE", "IMAGE", "IMAGE", "MASK", "STRING", "STRING", "INT", "INT",
-                    "IMAGE", "IMAGE", "MASK", "MASK", "STRING", SHOT_TYPE)
+                    "IMAGE", "IMAGE", "MASK", "MASK", "STRING", SHOT_TYPE, "IMAGE")
     RETURN_NAMES = ("image", "depth", "normal", "mask", "camera_json", "glb_path", "width", "height",
-                    "composite", "pose", "figure_masks", "figure_silhouettes", "figures_json", "shot")
+                    "composite", "pose", "figure_masks", "figure_silhouettes", "figures_json", "shot", "regions")
     OUTPUT_TOOLTIPS = (
         "The view as seen on the node (colour or clay look), at width x height. A batch when "
         "'render all saved shots' is on.",
@@ -131,6 +131,8 @@ class SceneRefViewer:
         "Per figure: colour, height, pose, pixel boxes (visible, full, head), hidden body parts, facing, "
         "keypoints. Feeds prompts and the face pass.",
         "Everything above in one wire, for the SceneRef Studio node.",
+        "One flat colour per object and per figure (black = background): the colour map of MOSS-Image's "
+        "colour/depth control (MOSS-Image Color/Depth Control's color_map, with 'depth' as its depth_map).",
     )
 
     @classmethod
@@ -159,7 +161,7 @@ class SceneRefViewer:
             raise ValueError(NO_CAPTURE)
         size = (int(width), int(height))
         out = {p: [] for p in PASSES + ("composite", "pose")}
-        figure_masks, figure_full, figure_info = [], [], []
+        figure_masks, figure_full, figure_info, regions = [], [], [], []
         for shot in shots[:64]:
             if not isinstance(shot, dict):
                 raise ValueError(NO_CAPTURE)
@@ -174,6 +176,9 @@ class SceneRefViewer:
             out["composite"].append(_load_rgb(comp, size) if comp else out["image"][-1])
             pose = _capture_path(shot.get("pose"))
             out["pose"].append(_load_rgb(pose, size) if pose else torch.zeros(size[1], size[0], 3))
+            # Region ids (MOSS-Image's colour map); captures from before this pass have none.
+            reg = _capture_path(shot.get("regions"))
+            regions.append(moss.load_regions(reg, size) if reg else None)
             cam = shot.get("camera") if isinstance(shot.get("camera"), dict) else {}
             figs = cam.get("figures") if isinstance(cam.get("figures"), list) else []
             figure_info.append(figs)
@@ -187,12 +192,16 @@ class SceneRefViewer:
                 figure_masks.append(torch.zeros(size[1], size[0]))
                 figure_full.append(torch.zeros(size[1], size[0]))
         cams = [s.get("camera") for s in shots if isinstance(s, dict)]
+        region_ids = torch.from_numpy(np.stack(regions)) if all(r is not None for r in regions) else None
+        colours = (torch.stack([torch.from_numpy(moss.colour_map(r)) for r in regions]) if region_ids is not None
+                   else torch.zeros(len(regions), size[1], size[0], 3))
         n_figs = [min(len(f), 8) if f else 0 for f in figure_info]
         shot = {"image": torch.stack(out["image"]), "composite": torch.stack(out["composite"]),
                 "depth": torch.stack(out["depth"]), "normal": torch.stack(out["normal"]),
                 "pose": torch.stack(out["pose"]), "figure_masks": torch.stack(figure_masks),
                 "figure_silhouettes": torch.stack(figure_full), "figures": figure_info,
-                "figures_per_shot": n_figs, "cameras": cams, "width": size[0], "height": size[1]}
+                "figures_per_shot": n_figs, "cameras": cams, "width": size[0], "height": size[1],
+                "regions": region_ids}
         key = st.get("key")
         glb = ""
         if isinstance(key, str) and jobs.KEY_RE.match(key):
@@ -215,6 +224,7 @@ class SceneRefViewer:
             torch.stack(figure_full),
             json.dumps(figure_info if len(figure_info) > 1 else figure_info[0], indent=1),
             shot,
+            colours,
         )}
 
 

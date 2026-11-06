@@ -231,6 +231,8 @@ const ONLY = {
   "FLUX.3 Klein": ["klein3_upsampler", "klein3_model", "klein3_text_encoder", "klein_vae"],
   "Qwen-Image 2.1 + ControlNet": ["qwen_model", "qwen_text_encoder", "qwen_vae", "qwen_controlnet", "control_strength", "control_mode"],
   "Krea2 + identity edit": ["krea2_model", "krea2_text_encoder", "krea2_vae", "krea2_identity_lora", "ref_boost"],
+  "MOSS-Image + scene control": ["moss_model", "moss_text_encoder", "moss_vae", "moss_edit_lora", "moss_control_lora",
+    "moss_control_strength", "moss_control_end", "moss_regions", "moss_layout"],
 };
 const FACE = ["face_pass", "face_steps", "face_denoise", "face_sampler", "face_scheduler"];
 const IMAGE_ONLY = ["backend", "cfg", "image_resolution", "image_aspect", ...FACE, ...Object.values(ONLY).flat()];
@@ -246,14 +248,16 @@ const LEGACY = ["filename_prefix", "identity_pass", "identity_strength", "h3_str
   "style", "expand", "h3_turbo_lora"];
 const ALWAYS_HIDDEN = ["cast_json", "loras_json", "expanded", ...LEGACY];
 const MODELS = ["klein_model", "klein_text_encoder", "klein_vae", "klein3_model", "klein3_text_encoder", "qwen_model", "qwen_text_encoder", "qwen_vae",
-  "qwen_controlnet", "krea2_model", "krea2_text_encoder", "krea2_vae", "krea2_identity_lora", "h3_model",
-  "h3_text_encoder", "h3_vae", "h3_audio_vae"];
-const ADVANCED = [...SAMPLING, "klein3_upsampler", "control_strength", "control_mode", "ref_megapixels", "ref_boost", ...FACE,
+  "qwen_controlnet", "krea2_model", "krea2_text_encoder", "krea2_vae", "krea2_identity_lora", "moss_model",
+  "moss_text_encoder", "moss_vae", "moss_edit_lora", "moss_control_lora", "h3_model", "h3_text_encoder", "h3_vae",
+  "h3_audio_vae"];
+const ADVANCED = [...SAMPLING, "klein3_upsampler", "control_strength", "control_mode", "ref_megapixels", "ref_boost",
+  "moss_control_strength", "moss_control_end", ...FACE,
   "h3_ref_size", ...MODELS];
 // The order the widgets are shown in. Saved workflows keep the server's order (see
 // arrange / canonical below), so this can change without breaking them.
-const SHOWN_ORDER = ["create", "backend", "action", "expander_model", "room_details", "scene_ref_expand", "seed",
-  "image_resolution", "image_aspect", "video_seconds", "video_resolution", "aspect_ratio", "scene_ref_size",
+const SHOWN_ORDER = ["create", "backend", "action", "expander_model", "room_details", "moss_layout", "scene_ref_expand", "seed",
+  "image_resolution", "image_aspect", "moss_regions", "video_seconds", "video_resolution", "aspect_ratio", "scene_ref_size",
   "clear_cache_after", "scene_ref_studio", ...ADVANCED];
 // Clearer names on the node (the inputs keep theirs).
 const LABELS = { h3_vae: "h3_video_vae", h3_audio_vae: "h3_audio_vae", image_resolution: "picture_size",
@@ -800,6 +804,8 @@ function buildExpandRow(node) {
           aspect_ratio: value("aspect_ratio", "as framed"),
           video_seconds: value("video_seconds", 5),
           klein3_upsampler: value("klein3_upsampler", "auto"),
+          image_resolution: value("image_resolution", "as framed"),
+          moss_layout: !!value("moss_layout", false),
         }),
       });
       const j = await r.json().catch(() => ({}));

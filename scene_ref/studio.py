@@ -16,6 +16,13 @@ Backends:
 * Krea2 + the krea2_identity_edit LoRA (needs the comfyui-krea2edit node pack): one
   edit pass per character, "replace the red mannequin with the person in image 2",
   over the composite. The edit keeps image 1 exactly, so room and pose stay put.
+* MOSS-Image (native in ComfyUI 0.43+): the scene reaches it as geometry, not as a picture:
+  the depth (bodies included) and a flat-colour map of which object is where go through its
+  colour/depth control adapter, so the room, the furniture and every body keep their exact
+  place and size while the picture is drawn fresh (no render look carried over). The
+  people are named in the text and the face pass gives them their faces with Klein (MOSS's
+  edit LoRA loses the likeness under the control adapter, see moss.py). A scene from
+  pictures goes through the edit LoRA instead: the photo is image 1, the cast follow.
 
 After the picture: the face pass.
 
@@ -28,6 +35,8 @@ The prompt box is used exactly as written. The Studio adds nothing to it at Run;
 """
 from __future__ import annotations
 
+import json
+import math
 import os
 import re
 
@@ -39,7 +48,7 @@ import folder_paths
 
 from .characters import (CAST_TYPE, FIGURE_COLORS, _upper1, add_to_cast, cache_dir, cast_from_json,
                          character_line, grow_inputs, grown, refs_text, resolve_refs)
-from . import flux3, h3prompt, scenes, voice
+from . import flux3, h3prompt, moss, scenes, voice
 from .loras import LORAS_TYPE, parse_stack
 from .vlm import vlm_files
 from .nodes import SHOT_TYPE
@@ -48,8 +57,9 @@ KLEIN = "FLUX.2 Klein 9B"
 KLEIN3 = "FLUX.3 Klein"
 QWEN = "Qwen-Image 2.1 + ControlNet"
 KREA2 = "Krea2 + identity edit"
+MOSS = "MOSS-Image + scene control"
 H3_BACKEND = "MiniMax H3 ref2v"  # movie mode's model; no longer an image backend
-BACKENDS = (KLEIN, KLEIN3, QWEN, KREA2)
+BACKENDS = (KLEIN, KLEIN3, QWEN, KREA2, MOSS)
 IMAGE, MOVIE = "image", "movie"
 # Settings of the removed H3 picture paths (backend, identity pass, picture + clip). Kept as
 # hidden inputs so saved workflows still load; their values are ignored.
@@ -88,6 +98,8 @@ DEFAULTS = {KLEIN: {"steps": 4, "cfg": 1.0, "sampler_name": "euler", "scheduler"
             KLEIN3: {"steps": 16, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"},
             QWEN: {"steps": 25, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"},
             KREA2: {"steps": 10, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple"},
+            # ComfyUI's MOSS-Image colour/depth control template (25 steps, CFG 3, er_sde, simple).
+            MOSS: {"steps": 25, "cfg": 3.0, "sampler_name": "er_sde", "scheduler": "simple"},
             MOVIE: {"steps": 20, "cfg": 1.0, "sampler_name": "res_multistep", "scheduler": "simple"}}
 
 # How "auto" picks a file: first match, in this order of preference.
@@ -115,11 +127,19 @@ PICKS = {
     "h3_vae": ("vae", [r"minimax_h3_video_vae"]),
     "h3_turbo_lora": ("loras", [r"ref2v_turbo_8step.*comfyui", r"ref2v_turbo_8step", r"ref2v_turbo"]),
     "h3_audio_vae": ("vae", [r"minimax_h3_audio_vae"]),
+    # The SFT checkpoint (Base is for training); its Qwen3.5 9B encoder with the vision tower
+    # (not FLUX.3's prompt upsampler, which is a Qwen3.5 9B too); the small FLUX.2 VAE.
+    "moss_model": ("diffusion_models", [r"moss_image_sft_int8", r"moss_image_sft", r"moss.?image(?!.*base)"]),
+    "moss_text_encoder": ("text_encoders", [r"qwen3\.5_9b_w4a8_gptq", r"qwen3\.5_9b_int8_convrot",
+                                            r"qwen3\.5.?9b(?!.*(upsampler|abliterated))"]),
+    "moss_vae": ("vae", [r"flux2-vae_small", r"flux2.?vae.?small"]),
+    "moss_edit_lora": ("loras", [r"moss_image_edit_lora", r"moss.?image.?edit"]),
+    "moss_control_lora": ("loras", [r"moss_image_color_depth_control", r"moss.*(colou?r|depth).*control"]),
 }
 # Character LoRAs inside .char files, per backend.
 CHAR_LORA_ARCHS = {KLEIN: ("flux2-klein", "flux2", "flux2-klein-9b"), KLEIN3: ("flux3-klein", "flux3"),
                    QWEN: ("qwen-image", "qwen-image-2.1"),
-                   KREA2: ("krea2",), H3_BACKEND: ("minimax-h3", "h3")}
+                   KREA2: ("krea2",), MOSS: ("moss-image", "moss_image"), H3_BACKEND: ("minimax-h3", "h3")}
 # What "auto" looks for, for the tooltips.
 EXPECTED = {
     "klein_model": "flux-2-klein-9b.safetensors (diffusion_models)",
@@ -141,6 +161,11 @@ EXPECTED = {
     "h3_vae": "minimax_h3_video_vae_fp16 (vae)",
     "h3_turbo_lora": "minimax_h3_ref2v_turbo_8step (loras)",
     "h3_audio_vae": "minimax_h3_audio_vae_fp32 (vae)",
+    "moss_model": "moss_image_sft_int8_convrot (diffusion_models; the SFT one, not -base-)",
+    "moss_text_encoder": "qwen3.5_9b_w4a8_gptq (text_encoders; Comfy-Org/MOSS-Image)",
+    "moss_vae": "flux2-vae_small (vae; Comfy-Org/MOSS-Image)",
+    "moss_edit_lora": "moss_image_edit_lora_rank_64_bf16 (loras; Comfy-Org/MOSS-Image)",
+    "moss_control_lora": "moss_image_color_depth_control (loras; Comfy-Org/MOSS-Image)",
 }
 
 
@@ -410,6 +435,100 @@ def split_passes(text: str, n: int) -> list[str]:
     return parts
 
 
+def moss_people(figures: list, cast: list, size: tuple) -> list[tuple[dict, str, str]]:
+    """Per figure: (figure, who, what they do) for MOSS's prompt. The control map holds the
+    body; the text says who it is and, for the layout's boxes, how they stand."""
+    by_figure = {c.get("figure"): c for c in cast if c.get("figure")}
+    names = [c["name"] for c in cast]
+    out = []
+    for f in figures or []:
+        ch = by_figure.get(int(f.get("index") or 0))
+        if ch:
+            who = ch["name"]
+        else:
+            who = {"male": "a man", "female": "a woman"}.get(f.get("sex"), "a person")
+            if f.get("kind") == "daz" and f.get("look") == "textured":
+                who = "a real person who looks exactly like the 3D character there"
+            elif names:
+                who += f" who is clearly a different person from {' and '.join(names)}"
+        what = ", ".join(x for x in (_pose_word(f), f.get("facing") or "") if x)
+        out.append((f, who, what))
+    return out
+
+
+def moss_prompt(figures: list, cast: list, body: str, triggers: str, size: tuple = (0, 0), photo: bool = False,
+                angles: int = 0, layout: bool = False, out_size: tuple = (0, 0)) -> str:
+    """A MOSS-Image prompt: which reference picture shows whom (see moss.ref_plan; a scene
+    from pictures only), who each figure is and where (a named character with their sex, so
+    the face pass finds the right kind of person to redo), then `body` (the scene as the
+    expander wrote it) and the trigger words.
+    layout = MOSS's JSON layout prompt instead: all of that as the caption, plus one
+    'character' box per figure in the picture's pixels (out_size; boxes in `size` are scaled),
+    compiled as OpenMOSS's prompt-enhancer skill does: one line, abs_centralized yxyx boxes
+    (left / top floored, right / bottom ceiled, then centred), no canvas size in it."""
+    n_scene, plan = moss.ref_plan(cast, angles, photo)
+    lines = []
+    pictured = set()
+    if photo:
+        # An edit instruction, the way MOSS's edit LoRA was trained: add the people to image 1.
+        added = []
+        for ch, idx, first in plan:
+            pictured.add(id(ch))
+            nums = refs_text(list(range(first, first + len(idx)))).lower()
+            added.append(f"{ch['name']}, the person from {nums},")
+        if added:
+            lines.append(f"Add {' and '.join(added)} to image 1.")
+        else:
+            lines.append("Edit image 1 as described below.")
+        if n_scene > 1:
+            nums = refs_text(list(range(2, n_scene + 1))).lower()
+            lines.append(f"{_upper1(nums)} {'shows' if n_scene == 2 else 'show'} the same place from "
+                         f"{'another angle' if n_scene == 2 else 'other angles'}, only to get it right.")
+        lines.append("Keep the place, the camera angle, the framing and the light of image 1 exactly as they are.")
+    for ch in cast:  # characters whose pictures did not fit: the text alone describes them
+        if id(ch) not in pictured and ch.get("description"):
+            lines.append(f"{ch['name']}: {' '.join(ch['description'].split())}")
+    people = moss_people(figures, cast, size)
+    named = {c["name"] for c in cast}
+    for f, who, what in people:
+        sex = {"male": "a man", "female": "a woman"}.get(f.get("sex"))
+        subject = f"{who}, {sex}," if who in named and sex else who
+        sentence = f"{subject[0].upper() + subject[1:]} is {_place_phrase(f, *size)}" + (f", {what}" if what else "")
+        if f.get("hidden_parts"):
+            sentence += f"; the {_hidden(f['hidden_parts'])} are hidden behind the furniture"
+        lines.append(sentence + ".")
+    head = " ".join(x for x in lines if x)
+    text = "\n\n".join(x for x in (head, body.strip(), triggers.strip()) if x)
+    boxed = [(f, who, what) for f, who, what in people if f.get("bbox_visible") or f.get("bbox_full")]
+    if not (layout and boxed and size[0] and out_size[0]):
+        return text
+    W, H = out_size
+    sx, sy = W / size[0], H / size[1]
+    by_figure = {c.get("figure"): c for c in cast if c.get("figure")}
+    items = []
+    for f, who, what in boxed:
+        x0, y0, x1, y1 = f.get("bbox_visible") or f.get("bbox_full")
+        # Pixel edges inside the canvas, then centred.
+        x0, y0 = max(0, math.floor(x0 * sx)), max(0, math.floor(y0 * sy))
+        x1, y1 = min(W, math.ceil(x1 * sx)), min(H, math.ceil(y1 * sy))
+        caption = f"{who}" + (f", {what}" if what else "")
+        desc = (by_figure.get(int(f.get("index") or 0)) or {}).get("description")
+        if desc:
+            caption += f". {' '.join(desc.split())}"
+        items.append({"label": "character", "caption": caption,
+                      "bbox": [y0 - H // 2, x0 - W // 2, y1 - H // 2, x1 - W // 2]})
+    return json.dumps({"summary": {"canvas": "single", "caption": text}, "items": items,
+                       "bbox_coord_space": "abs_centralized", "bbox_format": "yxyx"},
+                      ensure_ascii=False, separators=(",", ":"))
+
+
+def picture_size(cw: int, ch_: int, image_resolution: str) -> tuple[int, int]:
+    """The picture's size from the (cropped) frame: about the megapixels asked for in its
+    aspect, or the frame itself ('as framed'); both sides multiples of 16."""
+    mp = IMAGE_RESOLUTIONS.get(image_resolution)
+    return h3_size(cw, ch_, mp, 16) if mp else (cw // 16 * 16, ch_ // 16 * 16)
+
+
 # ── images ────────────────────────────────────────────────────────────────────
 def _ref_tensor(im) -> torch.Tensor:
     arr = np.asarray(im.convert("RGB"), dtype=np.float32) / 255.0
@@ -557,7 +676,7 @@ class SceneRefStudio:
     DESCRIPTION = (
         "The control panel: wire the viewer's 'shot', pick image or movie at the top, set who is in it in the "
         "Cast list, add LoRAs, write the prompt (or have the vision model write it from the action) and Run. "
-        "Images: FLUX.2 Klein, FLUX.3 Klein, Qwen-Image 2.1 or Krea2, built as a full graph inside. Movies: MiniMax H3 ref2va "
+        "Images: FLUX.2 Klein, FLUX.3 Klein, Qwen-Image 2.1, Krea2 or MOSS-Image, built as a full graph inside. Movies: MiniMax H3 ref2va "
         "from the scene as framed and the characters' pictures. Wire 'image' / 'video' into a SceneRef Preview & "
         "Save node to see and keep the result."
     )
@@ -590,7 +709,10 @@ class SceneRefStudio:
                             "prompt upsampler (press 'Write the prompt'). "
                             "Qwen-Image 2.1 + ControlNet: slower (25 steps), depth / pose ControlNet holds "
                             "every body exactly in place. Krea2 + identity edit: one pass per character, "
-                            "best likeness, keeps the layout (needs comfyui-krea2edit)."}),
+                            "best likeness, keeps the layout (needs comfyui-krea2edit). MOSS-Image + scene control: "
+                            "25 steps; the room, furniture and bodies are held by the scene's depth and object map "
+                            "(not copied from the render, so no 3D look carries over); faces come from the face "
+                            "pass (needs ComfyUI 0.43+ and the Comfy-Org/MOSS-Image files)."}),
                 "action": ("STRING", {"multiline": True, "default": "", "tooltip": "For the vision model only "
                            "(it is not part of the prompt): what happens and how it should look, e.g. 'Emma "
                            "sleeps on the couch under a blanket. Jack pours coffee at the table. Late night, "
@@ -622,8 +744,9 @@ class SceneRefStudio:
                 "face_pass": ("BOOLEAN", {"default": True, "tooltip": "After the picture is made, redo every "
                               "visible face that belongs to a character on a figure (heads big enough to redo), "
                               "close up, from that "
-                              "character's face pictures only (FLUX.2 Klein, about 3 s per face). Klein and Qwen "
-                              "only: Krea2 does each person from their pictures already."}),
+                              "character's face pictures only (FLUX.2 Klein, about 3 s per face). Klein, Qwen and "
+                              "MOSS-Image only: Krea2 does each person from their pictures already. With MOSS-Image "
+                              "in a 3D scene this is where the faces come from: keep it on."}),
                 "filename_prefix": legacy(("STRING", {"default": "SceneRef/studio"})),
                 "klein_model": models("klein_model"),
                 "klein_text_encoder": models("klein_text_encoder"),
@@ -709,6 +832,28 @@ class SceneRefStudio:
                                      "mmproj file next to it) runs in llama.cpp's llama-server. 'expander model' uses "
                                      "the expander_model above with BFL's instructions. All get BFL's system prompt "
                                      "and run greedy, so the same choice gives the same caption."}),
+                "moss_model": models("moss_model"),
+                "moss_text_encoder": models("moss_text_encoder"),
+                "moss_vae": models("moss_vae"),
+                "moss_edit_lora": models("moss_edit_lora"),
+                "moss_control_lora": models("moss_control_lora"),
+                "moss_control_strength": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 3.0, "step": 0.05,
+                                          "tooltip": "MOSS-Image: how hard the scene's depth and object map hold "
+                                          "the room and the bodies. 0.7 keeps everything in place and lets bodies "
+                                          "look real; 1.0 (ComfyUI's template) copies the mannequins' segmented "
+                                          "limbs in close shots; 0 = off (the text alone places everything)."}),
+                "moss_control_end": ("FLOAT", {"default": 0.4, "min": 0.05, "max": 1.0, "step": 0.05,
+                                     "tooltip": "MOSS-Image: the part of the run the map holds (0.4 = the first 40% "
+                                     "of the steps; ComfyUI's template uses 0.6). Higher pins the shapes to the last "
+                                     "step; lower frees surfaces, light and bodies."}),
+                "moss_regions": ("BOOLEAN", {"default": True, "label_on": "depth + object map", "label_off":
+                                 "depth only", "tooltip": "MOSS-Image: also give the control adapter the flat-colour "
+                                 "map of which object is where (the viewer's 'regions' output), so each piece of "
+                                 "furniture keeps its outline, not just its depth."}),
+                "moss_layout": ("BOOLEAN", {"default": False, "tooltip": "MOSS-Image, Write the prompt: write it as "
+                                "MOSS's JSON layout (the text as the caption, plus a 'character' box per figure in "
+                                "the picture's pixels). Experimental in MOSS itself. Write the prompt again after "
+                                "changing the picture size: the boxes are in its pixels."}),
             },
             "optional": {
                 "cast": (CAST_TYPE, {"tooltip": "Optional: more characters from SceneRef Character nodes, "
@@ -728,7 +873,8 @@ class SceneRefStudio:
             aspect_ratio="as framed", h3_ref_size="match", video_seconds=5.0, video_resolution="0.4 MP (fast)",
             create=IMAGE, expanded="", image_resolution="as framed", image_aspect="as framed",
             sampler_name="euler", scheduler=FLUX2_SCHEDULER, face_steps=8, face_denoise=FACE_DENOISE,
-            face_sampler="euler", face_scheduler=FLUX2_SCHEDULER, **models):
+            face_sampler="euler", face_scheduler=FLUX2_SCHEDULER, moss_control_strength=0.7, moss_control_end=0.4,
+            moss_regions=True, moss_layout=False, **models):
         from comfy_execution.graph_utils import GraphBuilder
 
         movie = create == MOVIE
@@ -784,6 +930,9 @@ class SceneRefStudio:
             vae = g.node("VAELoader", vae_name=pick("klein_vae", models.get("klein_vae"))).out(0)
         elif backend == KLEIN3:
             model, clip, vae = self._klein3_models(g, models)
+        elif backend == MOSS:
+            moss_plan = self._moss_plan(shot, cast, moss_control_strength)
+            model, clip, vae = self._moss_models(g, models, control=moss_plan["control"], edit=moss_plan["edit"])
         elif backend == KREA2:
             import nodes as comfy_nodes
             if "Krea2EditModelPatch" not in comfy_nodes.NODE_CLASS_MAPPINGS:
@@ -806,6 +955,10 @@ class SceneRefStudio:
         model = add_loras(model)
         if backend == KLEIN3:
             model = self._klein3_shift(g, model)
+        if backend == MOSS:
+            # MOSS-Image's own guidance: skip layer 22 on the negative branch (its user guide).
+            model = g.node("SkipLayerGuidanceDiTSimple", model=model, double_layers="", single_layers=moss.SKIP_LAYER,
+                           start_percent=0.0, end_percent=1.0).out(0)
 
         # A picture scene's other angles (images 2..n, as 'Write the prompt' numbers them), then the
         # character pictures; encoded once and shared by every shot. Krea2 takes no extra pictures.
@@ -816,8 +969,7 @@ class SceneRefStudio:
         # megapixels asked for ('as framed' = as rendered).
         sw, sh = int(shot["width"]), int(shot["height"])
         left, top, cw, ch_ = aspect_crop(sw, sh, ASPECTS.get(image_aspect))
-        mp = IMAGE_RESOLUTIONS.get(image_resolution)
-        width, height = h3_size(cw, ch_, mp, 16) if mp else (cw // 16 * 16, ch_ // 16 * 16)
+        width, height = picture_size(cw, ch_, image_resolution)
         cropped = (cw, ch_) != (sw, sh)
 
         def view(t):
@@ -837,6 +989,19 @@ class SceneRefStudio:
             elif backend == KREA2:
                 img = self._krea2(g, model, clip, vae, composite, figures, cast, prompt, width, height, seed + s,
                                   steps, cfg, sampling, ref_boost)
+            elif backend == MOSS:
+                depth = colours = None
+                if moss_plan["control"]:
+                    depth = g.node("ImageScale", image=view(shot["depth"][s:s + 1]), upscale_method="bilinear",
+                                   width=width, height=height, crop="disabled").out(0)
+                    if moss_regions and shot.get("regions") is not None:
+                        ids = shot["regions"][s].numpy()[top:top + ch_, left:left + cw]
+                        colours = g.node("ImageScale", image=torch.from_numpy(moss.colour_map(ids))[None],
+                                         upscale_method="nearest-exact", width=width, height=height,
+                                         crop="disabled").out(0)
+                pictures = ([composite] + moss_plan["angles"] if moss_plan["photo"] else []) + moss_plan["people"]
+                img = self._moss(g, model, clip, vae, pictures, prompt, width, height, seed + s, steps, cfg, sampling,
+                                 depth, colours, moss_control_strength, moss_control_end, place=moss_plan["photo"])
             else:
                 # A picture scene has no depth: Qwen keeps image 1 by itself.
                 depth = view(shot["depth"][s:s + 1]) if control_mode != "pose" and shot["depth"] is not None else None
@@ -848,9 +1013,10 @@ class SceneRefStudio:
                 scene = composite if marked else view(shot["image"][s:s + 1])
                 img = self._qwen(g, model, clip, vae, scene, refs, prompt, width, height, seed + s,
                                  steps, cfg, sampling, control_strength, depth, pose, models)
-            # The face pass only after Klein / Qwen. Krea2 draws people at real-body size, so heads
-            # sit away from the mannequins' heads and faces redone there landed on the wall.
-            if face_pass and backend in (KLEIN, KLEIN3, QWEN):
+            # The face pass only after Klein / Qwen / MOSS. Krea2 draws people at real-body size, so
+            # heads sit away from the mannequins' heads and faces redone there landed on the wall;
+            # MOSS's control map keeps every body on its mannequin, so the head boxes still fit.
+            if face_pass and backend in (KLEIN, KLEIN3, QWEN, MOSS):
                 own = backend in (KLEIN, KLEIN3)
                 img = self._faces(g, img, figures, cast, (width, height), (cw, ch_), seed + s, models,
                                   model if own else None, clip if own else None, vae if own else None, backend, face)
@@ -924,6 +1090,77 @@ class SceneRefStudio:
             img = g.node("ImageCompositeMasked", destination=img, source=new, x=left, y=top, resize_source=False,
                          mask=_soft_mask(side, 0.55, 0.8)).out(0)
         return img
+
+    @staticmethod
+    def _moss_plan(shot, cast, strength):
+        """What a MOSS run uses: the control (a 3D scene's depth and object map, unless switched
+        off) and, for a scene from pictures, the reference pictures (moss.ref_plan: the place and
+        its angles, then the characters') through the edit LoRA."""
+        photo = scenes.is_pictures(shot)
+        angles = scenes.angles_of(shot)
+        n_scene, plan = moss.ref_plan(cast, len(angles), photo)
+        people = [_ref_tensor(ch["refs"][i][0]) for ch, idx, _first in plan for i in idx]
+        control = strength > 0 and shot.get("depth") is not None
+        return {"photo": photo, "angles": angles[:max(0, n_scene - 1)], "people": people, "control": control,
+                "edit": bool(people) or photo}
+
+    @staticmethod
+    def _moss_models(g, models, control, edit):
+        """MOSS-Image (SFT), its Qwen3.5 encoder and the small FLUX.2 VAE (all native in ComfyUI
+        0.43+), with the colour/depth control adapter and the edit LoRA when the run uses them."""
+        import nodes as comfy_nodes
+        missing = [n for n in ("MOSSImageControl", "TextEncodeMOSSImageEdit") if n not in comfy_nodes.NODE_CLASS_MAPPINGS]
+        if missing:
+            raise ValueError("SceneRef Studio: the MOSS-Image backend needs ComfyUI 0.43 or newer (its native "
+                             f"MOSS-Image nodes; missing: {', '.join(missing)}). Update ComfyUI.")
+        model = g.node("UNETLoader", unet_name=pick("moss_model", models.get("moss_model")),
+                       weight_dtype="default").out(0)
+        if control:
+            model = g.node("LoraLoaderModelOnly", model=model, strength_model=1.0,
+                           lora_name=pick("moss_control_lora", models.get("moss_control_lora"))).out(0)
+        if edit:
+            model = g.node("LoraLoaderModelOnly", model=model, strength_model=1.0,
+                           lora_name=pick("moss_edit_lora", models.get("moss_edit_lora"))).out(0)
+        clip = g.node("CLIPLoader", clip_name=pick("moss_text_encoder", models.get("moss_text_encoder")),
+                      type="moss_image", device="default").out(0)
+        vae = g.node("VAELoader", vae_name=pick("moss_vae", models.get("moss_vae"))).out(0)
+        return model, clip, vae
+
+    @staticmethod
+    def _moss(g, model, clip, vae, pictures, prompt, width, height, seed, steps, cfg, sampling, depth, colours,
+              strength, end, place=False):
+        """MOSS-Image: the reference pictures (if any) through the edit LoRA's encoder, the depth
+        and object map through the colour/depth control, a fresh latent at the picture's size."""
+        if pictures:
+            # 1 MP for all of them together (see moss.REF_MEGAPIXELS), never enlarged.
+            pictures = pictures[:moss.MAX_REFS]
+            if place and len(pictures) > 1:  # a scene from pictures: the place keeps most of it
+                shares = [moss.REF_MEGAPIXELS * moss.PLACE_SHARE] +                          [moss.REF_MEGAPIXELS * (1 - moss.PLACE_SHARE) / (len(pictures) - 1)] * (len(pictures) - 1)
+            else:
+                shares = [moss.REF_MEGAPIXELS / len(pictures)] * len(pictures)
+
+            def scale(t, mp):
+                if isinstance(t, torch.Tensor):
+                    mp = min(mp, t.shape[1] * t.shape[2] / 1e6)
+                return g.node("ImageScaleToTotalPixels", image=t, upscale_method="lanczos", megapixels=round(mp, 3),
+                              resolution_steps=16).out(0)
+            scaled = {f"images.image_{k}": scale(t, mp) for k, (t, mp) in enumerate(zip(pictures, shares))}
+            pos = g.node("TextEncodeMOSSImageEdit", clip=clip, prompt=prompt, vae=vae, edit_format=moss.EDIT_FORMAT,
+                         image_strength=1.0, **scaled).out(0)
+            neg = g.node("TextEncodeMOSSImageEdit", clip=clip, prompt=moss.NEGATIVE, vae=vae,
+                         edit_format=moss.EDIT_FORMAT, image_strength=1.0, **scaled).out(0)
+        else:
+            pos = g.node("CLIPTextEncode", clip=clip, text=prompt).out(0)
+            neg = g.node("CLIPTextEncode", clip=clip, text=moss.NEGATIVE).out(0)
+        if depth is not None or colours is not None:
+            maps = {k: v for k, v in (("depth_map", depth), ("color_map", colours)) if v is not None}
+            ctl = g.node("MOSSImageControl", positive=pos, negative=neg, vae=vae, strength=strength, start_percent=0.0,
+                         end_percent=end, **maps)
+            pos, neg = ctl.out(0), ctl.out(1)
+        latent = g.node("EmptyFlux2LatentImage", width=width, height=height, batch_size=1).out(0)
+        sampled = _sample(g, model, pos, neg, latent, seed, steps, cfg, sampling["sampler"], sampling["scheduler"],
+                          width, height)
+        return g.node("VAEDecode", samples=sampled, vae=vae).out(0)
 
     @staticmethod
     def _klein3_models(g, models):

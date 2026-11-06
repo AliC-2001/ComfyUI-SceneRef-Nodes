@@ -230,7 +230,9 @@ async def expand_text(request):
                                 image_aspect=ASPECTS.get(body.get("image_aspect")),
                                 movie_aspect=ASPECTS.get(body.get("aspect_ratio")),
                                 video_seconds=number("video_seconds", 5.0),
-                                upsampler=str(body.get("klein3_upsampler") or "auto"))
+                                upsampler=str(body.get("klein3_upsampler") or "auto"),
+                                image_resolution=str(body.get("image_resolution") or "as framed"),
+                                moss_layout=bool(body.get("moss_layout", False)))
         finally:
             comfy.utils.set_progress_bar_global_hook(hook)
     async with _expanding:

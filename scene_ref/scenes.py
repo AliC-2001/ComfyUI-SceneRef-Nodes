@@ -206,7 +206,7 @@ def make_shot(pictures: list[tuple[Image.Image, str]], megapixels: float, place:
     w, h = size
     return {"kind": PICTURES, "image": t, "composite": t, "depth": None, "normal": None, "pose": None,
             "figure_masks": torch.zeros(1, h, w), "figure_silhouettes": torch.zeros(1, h, w), "figures": [[]],
-            "figures_per_shot": [0], "cameras": [], "width": w, "height": h, "angles": angles,
+            "figures_per_shot": [0], "cameras": [], "width": w, "height": h, "angles": angles, "regions": None,
             "place": " ".join(place.split()), "name": name, "angles_in_pictures": bool(angles_in_pictures)}
 
 
